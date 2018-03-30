@@ -138,7 +138,8 @@ Vagrant.configure(2) do |config|
 
     c.vm.provision "shell", inline: $unixProvision, privileged: false
     c.vm.provision "shell", inline: $linuxGvmProvision, privileged: false
-    c.vm.provision "shell", inline: "dnf install -y make gcc python-pip python-virtualenv git"
+    c.vm.provision "shell", inline: "dnf install -y make gcc python-pip python-virtualenv git docker rsync"
+    c.vm.provision "shell", inline: "groupadd docker && gpasswd -a vagrant docker && systemctl start docker && newgrp docker"
 
     c.vm.synced_folder ".", "/vagrant", type: "virtualbox"
   end
