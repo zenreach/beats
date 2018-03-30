@@ -1,0 +1,8 @@
+module_version: 1.0
+
+var:
+  - name: envoy_container_ids
+    default:
+      - dummy_id
+ingest_pipeline: ingest/pipeline.json
+prospector: config/config.yml

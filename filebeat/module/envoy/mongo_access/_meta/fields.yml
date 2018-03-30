@@ -1,0 +1,32 @@
+- name: mongo_access
+  description: Mongo access log fields.
+  type: group
+  fields:
+  - name: log
+    description: Top-level fields for the mongo access log.
+    type: group
+    fields:
+    - name: db
+      description: Database that is accessed.
+      example: test
+      type: keyword
+    - name: collection
+      description: Collection that is accessed.
+      example: foo
+      type: keyword
+    - name: op
+      description: Operation that is run on the given database and collection: insert, update, or find.
+      example: find
+      type: keyword
+    - name: query
+      description: Query that is run for the given operation on the given database and collection.
+      example: "{foo=bar}"
+      type: text
+    - name: upstream_host
+      description: Mongo host that the connection is being proxied to.
+      example: "1.2.3.4:27017"
+      type: keyword
+    - name: fields
+      description: Projection used in the query, if any.
+      example: "{_id=1, foo=1, bar=1}"
+      type: text

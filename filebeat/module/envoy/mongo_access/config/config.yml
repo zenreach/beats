@@ -1,0 +1,17 @@
+type: log
+paths:
+{{ range $i, $id := .envoy_container_ids}}
+  - /var/lib/docker/containers/{{ $id }}/{{ $id }}-json.log
+{{ end }}
+include_lines:
+  - "^.*\"opcode\": \"OP_QUERY\".*$"
+exclude_lines:
+  - "^.*\"query\": {\"isMaster\": 1}.*$"
+  - "^.*\"admin.\\$cmd\".*$"
+  - "^.*\"opcode\": \"OP_REPLY\".*$"
+json.keys_under_root: true
+json.add_error_key: true
+json.message_key: log
+processors:
+  - add_docker_metadata: ~
+  - add_cloud_metadata: ~
