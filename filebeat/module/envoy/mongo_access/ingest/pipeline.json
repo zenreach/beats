@@ -1,0 +1,171 @@
+{
+  "description": "Pipeline for parsing envoy mongo_access logs",
+  "processors": [
+    {
+      "json": {
+        "field": "log",
+        "target_field": "envoy.mongo_access.log",
+        "ignore_failure": true
+      }
+    },
+    {
+        "remove": {
+            "field": "log"
+        }
+    },
+    {
+        "remove": {
+            "field": ["envoy.mongo_access.log.message.opcode"],
+            "ignore_failure": true
+        }
+    },
+    {
+        "grok": {
+            "field": "envoy.mongo_access.log.message.collection",
+            "patterns": [
+                "%{DB:envoy.mongo_access.log.db}\\.%{COLLECTION:envoy.mongo_access.log.collection}",
+                "%{WORD:envoy.mongo_access.log.db}"
+            ],
+            "pattern_definitions": {
+                "DB": "[^\\.]+",
+                "COLLECTION": "[^\\$]\\w+"
+            },
+            "ignore_missing": true
+        }
+    },
+    {
+        "remove": {
+            "field": "envoy.mongo_access.log.message.collection",
+            "ignore_failure": true
+        }
+    },
+    {
+        "grok": {
+            "field": "envoy.mongo_access.log.message.query.insert",
+            "patterns": [
+                "%{WORD:envoy.mongo_access.log.collection}"
+            ],
+            "ignore_missing": true
+        }
+    },
+    {
+        "gsub": {
+            "field": "envoy.mongo_access.log.message.query.insert",
+            "target_field": "envoy.mongo_access.log.op",
+            "pattern": "^.*$",
+            "replacement": "insert",
+            "ignore_missing": true
+        }
+    },
+    {
+        "remove": {
+            "field": "envoy.mongo_access.log.message.query.insert",
+            "ignore_failure": true
+        }
+    },
+    {
+        "grok": {
+            "field": "envoy.mongo_access.log.message.query.update",
+            "patterns": [
+                "%{WORD:envoy.mongo_access.log.collection}"
+            ],
+            "ignore_missing": true
+        }
+    },
+    {
+        "gsub": {
+            "field": "envoy.mongo_access.log.message.query.update",
+            "target_field": "envoy.mongo_access.log.op",
+            "pattern": "^.*$",
+            "replacement": "update",
+            "ignore_missing": true
+        }
+    },
+    {
+        "remove": {
+            "field": "envoy.mongo_access.log.message.query.update",
+            "ignore_failure": true
+        }
+    },
+    {
+        "set": {
+            "field": "envoy.mongo_access.log.op",
+            "value": "find",
+            "override": false,
+            "ignore_failure": true
+        }
+    },
+    {
+        "grok": {
+            "field": "envoy.mongo_access.log.message.query.find",
+            "patterns": [
+                "%{WORD:envoy.mongo_access.log.collection}"
+            ],
+            "ignore_missing": true
+        }
+    },
+    {
+        "gsub": {
+            "field": "envoy.mongo_access.log.message.query.find",
+            "target_field": "envoy.mongo_access.log.op",
+            "pattern": "^.*$",
+            "replacement": "find",
+            "ignore_missing": true
+        }
+    },
+    {
+        "remove": {
+            "field": "envoy.mongo_access.log.message.query.find",
+            "ignore_failure": true
+        }
+    },
+    {
+        "convert": {
+            "field": "envoy.mongo_access.log.message.query.projection",
+            "target_field": "envoy.mongo_access.log.fields",
+            "type": "string",
+            "ignore_missing": true
+        }
+    },
+    {
+        "remove": {
+            "field": "envoy.mongo_access.log.message.query.projection",
+            "ignore_failure": true
+        }
+    },
+    {
+        "convert": {
+            "field": "envoy.mongo_access.log.message.query",
+            "target_field": "envoy.mongo_access.log.query",
+            "type": "string",
+            "ignore_missing": true
+        }
+    },
+    {
+        "remove": {
+            "field": "envoy.mongo_access.log.message.query",
+            "ignore_failure": true
+        }
+    },
+    {
+        "convert": {
+            "field": "envoy.mongo_access.log.message.fields",
+            "target_field": "envoy.mongo_access.log.fields",
+            "type": "string",
+            "ignore_missing": true
+        }
+    },
+    {
+        "remove": {
+            "field": "envoy.mongo_access.log.message.fields",
+            "ignore_failure": true
+        }
+    }
+  ],
+  "on_failure" : [{
+    "set" : {
+      "field" : "_index",
+      "value" : "ingest-failures"
+    }
+  }]
+}

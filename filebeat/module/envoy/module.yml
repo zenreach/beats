@@ -1,0 +1,3 @@
+dashboards:
+  - id: Filebeat-Envoy-Mongo-Access-Dashboard
+    file: Filebeat-envoy-mongo-access.json

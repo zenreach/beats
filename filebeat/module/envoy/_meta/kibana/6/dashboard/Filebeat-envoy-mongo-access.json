@@ -1,0 +1,39 @@
+{
+  "objects": [
+    {
+      "attributes": {
+        "description": "",
+        "kibanaSavedObjectMeta": {
+          "searchSourceJSON": "{\"index\":\"filebeat-*\",\"filter\":[],\"query\":{\"query\":\"\",\"language\":\"lucene\"}}"
+        },
+        "title": "Mongo Cluster Utilization",
+        "uiStateJSON": "{}",
+        "version": 1,
+        "visState": "{\"title\":\"Mongo Cluster Utilization\",\"type\":\"pie\",\"params\":{\"type\":\"pie\",\"addTooltip\":true,\"addLegend\":true,\"legendPosition\":\"right\",\"isDonut\":true,\"labels\":{\"show\":false,\"values\":true,\"last_level\":true,\"truncate\":100}},\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"count\",\"schema\":\"metric\",\"params\":{}},{\"id\":\"2\",\"enabled\":true,\"type\":\"terms\",\"schema\":\"segment\",\"params\":{\"field\":\"envoy.mongo_access.log.db\",\"otherBucket\":false,\"otherBucketLabel\":\"Other\",\"missingBucket\":false,\"missingBucketLabel\":\"Missing\",\"size\":5,\"order\":\"desc\",\"orderBy\":\"1\",\"customLabel\":\"db\"}},{\"id\":\"3\",\"enabled\":true,\"type\":\"terms\",\"schema\":\"segment\",\"params\":{\"field\":\"envoy.mongo_access.log.collection\",\"otherBucket\":false,\"otherBucketLabel\":\"Other\",\"missingBucket\":false,\"missingBucketLabel\":\"Missing\",\"size\":5,\"order\":\"desc\",\"orderBy\":\"1\",\"customLabel\":\"collection\"}},{\"id\":\"4\",\"enabled\":true,\"type\":\"terms\",\"schema\":\"segment\",\"params\":{\"field\":\"envoy.mongo_access.log.op\",\"otherBucket\":false,\"otherBucketLabel\":\"Other\",\"missingBucket\":false,\"missingBucketLabel\":\"Missing\",\"size\":5,\"order\":\"desc\",\"orderBy\":\"1\",\"customLabel\":\"op\"}}]}"
+      },
+      "id": "6ff9fd50-345c-11e8-9854-8fdd028cae96",
+      "type": "visualization",
+      "updated_at": "2018-03-30T20:53:45.508Z",
+      "version": 1
+    },
+    {
+      "attributes": {
+        "description": "Mongo cluster utilization by database, collection, and operation",
+        "hits": 0,
+        "kibanaSavedObjectMeta": {
+          "searchSourceJSON": "{\"query\":{\"query\":\"\",\"language\":\"lucene\"},\"filter\":[],\"highlightAll\":true,\"version\":true}"
+        },
+        "optionsJSON": "{\"darkTheme\":true,\"useMargins\":true,\"hidePanelTitles\":false}",
+        "panelsJSON": "[{\"panelIndex\":\"1\",\"gridData\":{\"x\":0,\"y\":0,\"w\":12,\"h\":9,\"i\":\"1\"},\"version\":\"6.2.3\",\"type\":\"visualization\",\"id\":\"6ff9fd50-345c-11e8-9854-8fdd028cae96\"}]",
+        "timeRestore": false,
+        "title": "Mongo Default",
+        "version": 1
+      },
+      "id": "c5971a90-345c-11e8-9854-8fdd028cae96",
+      "type": "dashboard",
+      "updated_at": "2018-03-30T20:56:09.145Z",
+      "version": 1
+    }
+  ],
+  "version": "6.2.3"
+}

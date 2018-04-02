@@ -1,0 +1,10 @@
+- key: envoy
+  title: "envoy"
+  description: >
+    Envoy proxy module.
+  fields:
+    - name: envoy
+      type: group
+      description: >
+        Envoy proxy logs.
+      fields:
