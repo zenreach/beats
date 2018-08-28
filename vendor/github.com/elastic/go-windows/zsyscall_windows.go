@@ -37,16 +37,38 @@ func errnoErr(e syscall.Errno) error {
 var (
 	modkernel32 = syscall.NewLazyDLL("kernel32.dll")
 	modversion  = syscall.NewLazyDLL("version.dll")
+	modpsapi    = syscall.NewLazyDLL("psapi.dll")
 
 	procGetNativeSystemInfo     = modkernel32.NewProc("GetNativeSystemInfo")
 	procGetTickCount64          = modkernel32.NewProc("GetTickCount64")
+	procGetSystemTimes          = modkernel32.NewProc("GetSystemTimes")
+	procGlobalMemoryStatusEx    = modkernel32.NewProc("GlobalMemoryStatusEx")
 	procGetFileVersionInfoW     = modversion.NewProc("GetFileVersionInfoW")
 	procGetFileVersionInfoSizeW = modversion.NewProc("GetFileVersionInfoSizeW")
 	procVerQueryValueW          = modversion.NewProc("VerQueryValueW")
+	procGetProcessMemoryInfo    = modpsapi.NewProc("GetProcessMemoryInfo")
 )
 
-func _GetNativeSystemInfo(systemInfo *SystemInfo) (err error) {
-	r1, _, e1 := syscall.Syscall(procGetNativeSystemInfo.Addr(), 1, uintptr(unsafe.Pointer(systemInfo)), 0, 0)
+func _GetNativeSystemInfo(systemInfo *SystemInfo) {
+	syscall.Syscall(procGetNativeSystemInfo.Addr(), 1, uintptr(unsafe.Pointer(systemInfo)), 0, 0)
+	return
+}
+
+func _GetTickCount64() (millis uint64, err error) {
+	r0, _, e1 := syscall.Syscall(procGetTickCount64.Addr(), 0, 0, 0, 0)
+	millis = uint64(r0)
+	if millis == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
+}
+
+func _GetSystemTimes(idleTime *syscall.Filetime, kernelTime *syscall.Filetime, userTime *syscall.Filetime) (err error) {
+	r1, _, e1 := syscall.Syscall(procGetSystemTimes.Addr(), 3, uintptr(unsafe.Pointer(idleTime)), uintptr(unsafe.Pointer(kernelTime)), uintptr(unsafe.Pointer(userTime)))
 	if r1 == 0 {
 		if e1 != 0 {
 			err = errnoErr(e1)
@@ -57,10 +79,9 @@ func _GetNativeSystemInfo(systemInfo *SystemInfo) (err error) {
 	return
 }
 
-func _GetTickCount64() (millis uint64, err error) {
-	r0, _, e1 := syscall.Syscall(procGetTickCount64.Addr(), 0, 0, 0, 0)
-	millis = uint64(r0)
-	if millis == 0 {
+func _GlobalMemoryStatusEx(buffer *MemoryStatusEx) (err error) {
+	r1, _, e1 := syscall.Syscall(procGlobalMemoryStatusEx.Addr(), 1, uintptr(unsafe.Pointer(buffer)), 0, 0)
+	if r1 == 0 {
 		if e1 != 0 {
 			err = errnoErr(e1)
 		} else {
@@ -127,6 +148,18 @@ func __VerQueryValueW(data *byte, subBlock *uint16, pBuffer *uintptr, len *uint3
 	r0, _, e1 := syscall.Syscall6(procVerQueryValueW.Addr(), 4, uintptr(unsafe.Pointer(data)), uintptr(unsafe.Pointer(subBlock)), uintptr(unsafe.Pointer(pBuffer)), uintptr(unsafe.Pointer(len)), 0, 0)
 	success = r0 != 0
 	if !success {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
+}
+
+func _GetProcessMemoryInfo(handle syscall.Handle, psmemCounters *ProcessMemoryCountersEx, cb uint32) (err error) {
+	r1, _, e1 := syscall.Syscall(procGetProcessMemoryInfo.Addr(), 3, uintptr(handle), uintptr(unsafe.Pointer(psmemCounters)), uintptr(cb))
+	if r1 == 0 {
 		if e1 != 0 {
 			err = errnoErr(e1)
 		} else {

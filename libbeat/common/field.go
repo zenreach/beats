@@ -1,3 +1,20 @@
+// Licensed to Elasticsearch B.V. under one or more contributor
+// license agreements. See the NOTICE file distributed with
+// this work for additional information regarding copyright
+// ownership. Elasticsearch B.V. licenses this file to you under
+// the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 package common
 
 import (
@@ -17,22 +34,25 @@ import (
 type Fields []Field
 
 type Field struct {
-	Name           string      `config:"name"`
-	Type           string      `config:"type"`
-	Description    string      `config:"description"`
-	Format         string      `config:"format"`
-	ScalingFactor  int         `config:"scaling_factor"`
-	Fields         Fields      `config:"fields"`
-	MultiFields    Fields      `config:"multi_fields"`
-	ObjectType     string      `config:"object_type"`
-	Enabled        *bool       `config:"enabled"`
-	Analyzer       string      `config:"analyzer"`
-	SearchAnalyzer string      `config:"search_analyzer"`
-	Norms          bool        `config:"norms"`
-	Dynamic        DynamicType `config:"dynamic"`
-	Index          *bool       `config:"index"`
-	DocValues      *bool       `config:"doc_values"`
-	CopyTo         string      `config:"copy_to"`
+	Name                  string      `config:"name"`
+	Type                  string      `config:"type"`
+	Description           string      `config:"description"`
+	Format                string      `config:"format"`
+	ScalingFactor         int         `config:"scaling_factor"`
+	Fields                Fields      `config:"fields"`
+	MultiFields           Fields      `config:"multi_fields"`
+	ObjectType            string      `config:"object_type"`
+	ObjectTypeMappingType string      `config:"object_type_mapping_type"`
+	Enabled               *bool       `config:"enabled"`
+	Analyzer              string      `config:"analyzer"`
+	SearchAnalyzer        string      `config:"search_analyzer"`
+	Norms                 bool        `config:"norms"`
+	Dynamic               DynamicType `config:"dynamic"`
+	Index                 *bool       `config:"index"`
+	DocValues             *bool       `config:"doc_values"`
+	CopyTo                string      `config:"copy_to"`
+	IgnoreAbove           int         `config:"ignore_above"`
+	AliasPath             string      `config:"path"`
 
 	// Kibana specific
 	Analyzed     *bool  `config:"analyzed"`

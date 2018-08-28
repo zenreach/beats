@@ -1,3 +1,20 @@
+// Licensed to Elasticsearch B.V. under one or more contributor
+// license agreements. See the NOTICE file distributed with
+// this work for additional information regarding copyright
+// ownership. Elasticsearch B.V. licenses this file to you under
+// the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 package instance
 
 import (
@@ -19,16 +36,19 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/elastic/beats/libbeat/api"
+	"github.com/elastic/beats/libbeat/asset"
 	"github.com/elastic/beats/libbeat/beat"
 	"github.com/elastic/beats/libbeat/cfgfile"
 	"github.com/elastic/beats/libbeat/cloudid"
 	"github.com/elastic/beats/libbeat/common"
 	"github.com/elastic/beats/libbeat/common/cfgwarn"
 	"github.com/elastic/beats/libbeat/common/file"
+	"github.com/elastic/beats/libbeat/common/seccomp"
 	"github.com/elastic/beats/libbeat/dashboards"
 	"github.com/elastic/beats/libbeat/keystore"
 	"github.com/elastic/beats/libbeat/logp"
 	"github.com/elastic/beats/libbeat/logp/configure"
+	"github.com/elastic/beats/libbeat/metric/system/host"
 	"github.com/elastic/beats/libbeat/monitoring"
 	"github.com/elastic/beats/libbeat/monitoring/report"
 	"github.com/elastic/beats/libbeat/monitoring/report/log"
@@ -39,6 +59,8 @@ import (
 	svc "github.com/elastic/beats/libbeat/service"
 	"github.com/elastic/beats/libbeat/template"
 	"github.com/elastic/beats/libbeat/version"
+	"github.com/elastic/go-sysinfo"
+	"github.com/elastic/go-sysinfo/types"
 
 	// Register publisher pipeline modules
 	_ "github.com/elastic/beats/libbeat/publisher/includes"
@@ -50,9 +72,12 @@ import (
 	_ "github.com/elastic/beats/libbeat/processors/add_host_metadata"
 	_ "github.com/elastic/beats/libbeat/processors/add_kubernetes_metadata"
 	_ "github.com/elastic/beats/libbeat/processors/add_locale"
+	_ "github.com/elastic/beats/libbeat/processors/dissect"
+	_ "github.com/elastic/beats/libbeat/processors/dns"
 
 	// Register autodiscover providers
 	_ "github.com/elastic/beats/libbeat/autodiscover/providers/docker"
+	_ "github.com/elastic/beats/libbeat/autodiscover/providers/jolokia"
 	_ "github.com/elastic/beats/libbeat/autodiscover/providers/kubernetes"
 
 	// Register default monitoring reporting
@@ -74,8 +99,9 @@ type beatConfig struct {
 	// instance internal configs
 
 	// beat top-level settings
-	Name     string `config:"name"`
-	MaxProcs int    `config:"max_procs"`
+	Name     string         `config:"name"`
+	MaxProcs int            `config:"max_procs"`
+	Seccomp  *common.Config `config:"seccomp"`
 
 	// beat internal components configurations
 	HTTP          *common.Config `config:"http"`
@@ -105,7 +131,7 @@ func init() {
 	initRand()
 
 	flag.BoolVar(&printVersion, "version", false, "Print the version and exit")
-	flag.BoolVar(&setup, "setup", false, "Load the sample Kibana dashboards")
+	flag.BoolVar(&setup, "setup", false, "Load sample Kibana dashboards and setup Machine Learning")
 }
 
 // initRand initializes the runtime random number generator seed using
@@ -141,6 +167,25 @@ func Run(name, idxPrefix, version string, bt beat.Creator) error {
 		if err != nil {
 			return err
 		}
+
+		// Add basic info
+		registry := monitoring.GetNamespace("info").GetRegistry()
+		monitoring.NewString(registry, "version").Set(b.Info.Version)
+		monitoring.NewString(registry, "beat").Set(b.Info.Beat)
+		monitoring.NewString(registry, "name").Set(b.Info.Name)
+		monitoring.NewString(registry, "uuid").Set(b.Info.UUID.String())
+		monitoring.NewString(registry, "hostname").Set(b.Info.Hostname)
+
+		// Add additional info to state registry. This is also reported to monitoring
+		stateRegistry := monitoring.GetNamespace("state").GetRegistry()
+		serviceRegistry := stateRegistry.NewRegistry("service")
+		monitoring.NewString(serviceRegistry, "version").Set(b.Info.Version)
+		monitoring.NewString(serviceRegistry, "name").Set(b.Info.Beat)
+		monitoring.NewString(serviceRegistry, "id").Set(b.Info.UUID.String())
+		beatRegistry := stateRegistry.NewRegistry("beat")
+		monitoring.NewString(beatRegistry, "name").Set(b.Info.Name)
+		monitoring.NewFunc(stateRegistry, "host", host.ReportInfo, monitoring.Report)
+
 		return b.launch(bt)
 	}())
 }
@@ -159,6 +204,11 @@ func NewBeat(name, indexPrefix, v string) (*Beat, error) {
 		return nil, err
 	}
 
+	fields, err := asset.GetFields(name)
+	if err != nil {
+		return nil, err
+	}
+
 	b := beat.Beat{
 		Info: beat.Info{
 			Beat:        name,
@@ -168,6 +218,7 @@ func NewBeat(name, indexPrefix, v string) (*Beat, error) {
 			Hostname:    hostname,
 			UUID:        uuid.NewV4(),
 		},
+		Fields: fields,
 	}
 
 	return &Beat{Beat: b}, nil
@@ -219,6 +270,7 @@ func (b *Beat) createBeater(bt beat.Creator) (beat.Beater, error) {
 		return nil, err
 	}
 
+	logSystemInfo(b.Info)
 	logp.Info("Setup Beat: %s; Version: %s", b.Info.Beat, b.Info.Version)
 
 	err = b.registerTemplateLoading()
@@ -239,7 +291,7 @@ func (b *Beat) createBeater(bt beat.Creator) (beat.Beater, error) {
 	debugf("Initializing output plugins")
 	pipeline, err := pipeline.Load(b.Info, reg, b.Config.Pipeline, b.Config.Output)
 	if err != nil {
-		return nil, fmt.Errorf("error initializing publisher: %v", err)
+		return nil, fmt.Errorf("error initializing publisher: %+v", err)
 	}
 
 	// TODO: some beats race on shutdown with publisher.Stop -> do not call Stop yet,
@@ -266,6 +318,10 @@ func (b *Beat) launch(bt beat.Creator) error {
 
 	svc.BeforeRun()
 	defer svc.Cleanup()
+
+	if err = seccomp.LoadFilter(b.Config.Seccomp); err != nil {
+		return err
+	}
 
 	beater, err := b.createBeater(bt)
 	if err != nil {
@@ -303,7 +359,7 @@ func (b *Beat) launch(bt beat.Creator) error {
 		return err
 	}
 	if setup && b.SetupMLCallback != nil {
-		err = b.SetupMLCallback(&b.Beat)
+		err = b.SetupMLCallback(&b.Beat, b.Config.Kibana)
 		if err != nil {
 			return err
 		}
@@ -312,7 +368,7 @@ func (b *Beat) launch(bt beat.Creator) error {
 	logp.Info("%s start running.", b.Info.Beat)
 
 	if b.Config.HTTP.Enabled() {
-		api.Start(b.Config.HTTP, b.Info)
+		api.Start(b.Config.HTTP)
 	}
 
 	return beater.Run(&b.Beat)
@@ -337,8 +393,8 @@ func (b *Beat) TestConfig(bt beat.Creator) error {
 	}())
 }
 
-// Setup registers ES index template and kibana dashboards
-func (b *Beat) Setup(bt beat.Creator, template, dashboards, machineLearning bool) error {
+// Setup registers ES index template, kibana dashboards, ml jobs and pipelines.
+func (b *Beat) Setup(bt beat.Creator, template, dashboards, machineLearning, pipelines bool) error {
 	return handleError(func() error {
 		err := b.Init()
 		if err != nil {
@@ -394,11 +450,21 @@ func (b *Beat) Setup(bt beat.Creator, template, dashboards, machineLearning bool
 		}
 
 		if machineLearning && b.SetupMLCallback != nil {
-			err = b.SetupMLCallback(&b.Beat)
+			err = b.SetupMLCallback(&b.Beat, b.Config.Kibana)
 			if err != nil {
 				return err
 			}
 			fmt.Println("Loaded machine learning job configurations")
+		}
+
+		if pipelines && b.OverwritePipelinesCallback != nil {
+			esConfig := b.Config.Output.Config()
+			err = b.OverwritePipelinesCallback(esConfig)
+			if err != nil {
+				return err
+			}
+
+			fmt.Println("Loaded Ingest pipelines")
 		}
 
 		return nil
@@ -601,7 +667,6 @@ func (b *Beat) loadDashboards(ctx context.Context, force bool) error {
 // the elasticsearch output. It is important the the registration happens before
 // the publisher is created.
 func (b *Beat) registerTemplateLoading() error {
-
 	var cfg template.TemplateConfig
 
 	// Check if outputting to file is enabled, and output to file if it is
@@ -650,7 +715,7 @@ func (b *Beat) templateLoadingCallback() (func(esClient *elasticsearch.Client) e
 			b.Config.Template = common.NewConfig()
 		}
 
-		loader, err := template.NewLoader(b.Config.Template, esClient, b.Info)
+		loader, err := template.NewLoader(b.Config.Template, esClient, b.Info, b.Fields)
 		if err != nil {
 			return fmt.Errorf("Error creating Elasticsearch template loader: %v", err)
 		}
@@ -678,4 +743,74 @@ func handleError(err error) error {
 	logp.Critical("Exiting: %v", err)
 	fmt.Fprintf(os.Stderr, "Exiting: %v\n", err)
 	return err
+}
+
+// logSystemInfo logs information about this system for situational awareness
+// in debugging. This information includes data about the beat, build, go
+// runtime, host, and process. If any of the data is not available it will be
+// omitted.
+func logSystemInfo(info beat.Info) {
+	defer logp.Recover("An unexpected error occurred while collecting " +
+		"information about the system.")
+	log := logp.NewLogger("beat").With(logp.Namespace("system_info"))
+
+	// Beat
+	beat := common.MapStr{
+		"type": info.Beat,
+		"uuid": info.UUID,
+		"path": common.MapStr{
+			"config": paths.Resolve(paths.Config, ""),
+			"data":   paths.Resolve(paths.Data, ""),
+			"home":   paths.Resolve(paths.Home, ""),
+			"logs":   paths.Resolve(paths.Logs, ""),
+		},
+	}
+	log.Infow("Beat info", "beat", beat)
+
+	// Build
+	build := common.MapStr{
+		"commit":  version.Commit(),
+		"time":    version.BuildTime(),
+		"version": info.Version,
+		"libbeat": version.GetDefaultVersion(),
+	}
+	log.Infow("Build info", "build", build)
+
+	// Go Runtime
+	log.Infow("Go runtime info", "go", sysinfo.Go())
+
+	// Host
+	if host, err := sysinfo.Host(); err == nil {
+		log.Infow("Host info", "host", host.Info())
+	}
+
+	// Process
+	if self, err := sysinfo.Self(); err == nil {
+		process := common.MapStr{}
+
+		if info, err := self.Info(); err == nil {
+			process["name"] = info.Name
+			process["pid"] = info.PID
+			process["ppid"] = info.PPID
+			process["cwd"] = info.CWD
+			process["exe"] = info.Exe
+			process["start_time"] = info.StartTime
+		}
+
+		if proc, ok := self.(types.Seccomp); ok {
+			if seccomp, err := proc.Seccomp(); err == nil {
+				process["seccomp"] = seccomp
+			}
+		}
+
+		if proc, ok := self.(types.Capabilities); ok {
+			if caps, err := proc.Capabilities(); err == nil {
+				process["capabilities"] = caps
+			}
+		}
+
+		if len(process) > 0 {
+			log.Infow("Process info", "process", process)
+		}
+	}
 }
